@@ -10,6 +10,8 @@ export interface RoomLike {
 }
 
 export const QUESTION_ALREADY_ASKED_MSG = 'This question has already been asked and can no longer be edited.';
+export const QUESTION_NOT_FOUND_MSG = 'Question not found.';
+export const QUESTION_DELETE_LOCKED_MSG = 'This question has already been asked and can no longer be deleted.';
 
 export function missingQuestionMessage(roundNumber: number): string {
   return `Type question ${roundNumber} to continue.`;
@@ -67,6 +69,19 @@ export function getJoinBlockReason(currentPlayerCount: number, maxPlayers?: numb
   return currentPlayerCount >= maxPlayers ? `This room is full (maximum ${maxPlayers} players).` : null;
 }
 
+export function getQuestionDeleteBlockReason(
+  room: Pick<RoomLike, 'status' | 'currentRoundNumber' | 'questionCount' | 'settings'>,
+  roundNumber: number
+): string | null {
+  if (!Number.isInteger(roundNumber) || roundNumber < 1 || roundNumber > getQuestionCount(room)) {
+    return QUESTION_NOT_FOUND_MSG;
+  }
+  if (!isQuestionEditable(roundNumber, room.currentRoundNumber, room.status)) {
+    return QUESTION_DELETE_LOCKED_MSG;
+  }
+  return null;
+}
+
 // ---------- predicates ----------
 export function isQuestionEditable(roundNumber: number, currentRoundNumber: number, status: GamePhase): boolean {
   if (status === 'GAME_FINISHED') return false;
@@ -115,4 +130,23 @@ export function validateMaxPlayers(n: number, currentPlayerCount: number): strin
 export function getRemainingQuestionSlots(room: Pick<RoomLike, 'questionCount' | 'settings'>): number {
   return Math.max(0, GAME_LIMITS.MAX_QUESTIONS_PER_GAME - getQuestionCount(room));
 }
+
+export function planQuestionRemoval(
+  tailTexts: string[],
+  fromRoundNumber: number
+): { updates: { roundNumber: number; text: string }[]; deleteRoundNumber: number } {
+  if (tailTexts.length === 0) {
+    throw new Error('tailTexts cannot be empty');
+  }
+  const updates: { roundNumber: number; text: string }[] = [];
+  for (let i = 0; i <= tailTexts.length - 2; i++) {
+    updates.push({
+      roundNumber: fromRoundNumber + i,
+      text: tailTexts[i + 1],
+    });
+  }
+  const deleteRoundNumber = fromRoundNumber + tailTexts.length - 1;
+  return { updates, deleteRoundNumber };
+}
+
 

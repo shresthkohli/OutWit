@@ -108,3 +108,88 @@ export function buildAiQuestionPrompt(input: AiPromptInput): string {
   return lines.join('\n');
 }
 
+export interface AiPromptDraft {
+  moodId: string;
+  brutalityId: string;
+  natureId: string;
+  count: number;
+  context: string;
+  includeTopics: string;
+  avoidTopics: string;
+  includeNicknames: boolean;
+}
+
+export function createDefaultAiPromptDraft(maxCount: number): AiPromptDraft {
+  return {
+    moodId: DEFAULT_MOOD_ID,
+    brutalityId: DEFAULT_BRUTALITY_ID,
+    natureId: DEFAULT_NATURE_ID,
+    count: Math.min(GAME_LIMITS.DEFAULT_AI_QUESTION_COUNT, Math.max(1, maxCount)),
+    context: '',
+    includeTopics: '',
+    avoidTopics: '',
+    includeNicknames: true,
+  };
+}
+
+export function sanitizeAiPromptDraft(raw: unknown, maxCount: number): AiPromptDraft {
+  const fallback = createDefaultAiPromptDraft(maxCount);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return fallback;
+  }
+  const obj = raw as Record<string, unknown>;
+
+  const moodId =
+    typeof obj.moodId === 'string' && MOODS.some((m) => m.id === obj.moodId)
+      ? obj.moodId
+      : fallback.moodId;
+
+  const brutalityId =
+    typeof obj.brutalityId === 'string' && BRUTALITY_LEVELS.some((b) => b.id === obj.brutalityId)
+      ? obj.brutalityId
+      : fallback.brutalityId;
+
+  const natureId =
+    typeof obj.natureId === 'string' && NATURES.some((n) => n.id === obj.natureId)
+      ? obj.natureId
+      : fallback.natureId;
+
+  let count = fallback.count;
+  if (typeof obj.count === 'number' && Number.isFinite(obj.count)) {
+    const rounded = Math.round(obj.count);
+    count = Math.min(Math.max(1, maxCount), Math.max(1, rounded));
+  }
+
+  const context =
+    typeof obj.context === 'string'
+      ? obj.context.slice(0, GAME_LIMITS.AI_CONTEXT_MAX_LENGTH)
+      : fallback.context;
+
+  const includeTopics =
+    typeof obj.includeTopics === 'string'
+      ? obj.includeTopics.slice(0, GAME_LIMITS.AI_TOPICS_MAX_LENGTH)
+      : fallback.includeTopics;
+
+  const avoidTopics =
+    typeof obj.avoidTopics === 'string'
+      ? obj.avoidTopics.slice(0, GAME_LIMITS.AI_TOPICS_MAX_LENGTH)
+      : fallback.avoidTopics;
+
+  const includeNicknames =
+    typeof obj.includeNicknames === 'boolean'
+      ? obj.includeNicknames
+      : fallback.includeNicknames;
+
+  return {
+    moodId,
+    brutalityId,
+    natureId,
+    count,
+    context,
+    includeTopics,
+    avoidTopics,
+    includeNicknames,
+  };
+}
+
+

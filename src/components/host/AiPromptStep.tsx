@@ -10,7 +10,7 @@ import {
   DEFAULT_NATURE_ID,
   AiPromptOption,
 } from '../../constants/aiPromptOptions';
-import { buildAiQuestionPrompt } from '../../lib/aiPrompt';
+import { buildAiQuestionPrompt, AiPromptDraft } from '../../lib/aiPrompt';
 
 export interface AiPromptStepProps {
   eventLabel: string;
@@ -19,6 +19,8 @@ export interface AiPromptStepProps {
   nicknames: string[];
   remainingSlots: number;
   onNext: () => void;
+  draft: AiPromptDraft;
+  onDraftChange: (patch: Partial<AiPromptDraft>) => void;
 }
 
 const OptionGroup: React.FC<{
@@ -58,31 +60,26 @@ export const AiPromptStep: React.FC<AiPromptStepProps> = ({
   nicknames,
   remainingSlots,
   onNext,
+  draft,
+  onDraftChange,
 }) => {
   const maxCount = Math.max(1, remainingSlots);
-  const [moodId, setMoodId] = useState(DEFAULT_MOOD_ID);
-  const [brutalityId, setBrutalityId] = useState(DEFAULT_BRUTALITY_ID);
-  const [natureId, setNatureId] = useState(DEFAULT_NATURE_ID);
-  const [count, setCount] = useState(() => Math.min(GAME_LIMITS.DEFAULT_AI_QUESTION_COUNT, maxCount));
-  const [context, setContext] = useState('');
-  const [includeTopics, setIncludeTopics] = useState('');
-  const [avoidTopics, setAvoidTopics] = useState('');
-  const [includeNicknames, setIncludeNicknames] = useState(true);
+  const count = Math.min(draft.count, maxCount);
   const [copied, setCopied] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const promptText = buildAiQuestionPrompt({
-    moodId,
-    brutalityId,
-    natureId,
+    moodId: draft.moodId,
+    brutalityId: draft.brutalityId,
+    natureId: draft.natureId,
     count,
     eventLabel,
     roomName,
     maxAnswerWords,
-    context,
-    includeTopics,
-    avoidTopics,
-    nicknames: includeNicknames ? nicknames : [],
+    context: draft.context,
+    includeTopics: draft.includeTopics,
+    avoidTopics: draft.avoidTopics,
+    nicknames: draft.includeNicknames ? nicknames : [],
   });
 
   const handleCopy = async () => {
@@ -105,9 +102,24 @@ export const AiPromptStep: React.FC<AiPromptStepProps> = ({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3">
-        <OptionGroup label="Mood" options={MOODS} selectedId={moodId} onSelect={setMoodId} />
-        <OptionGroup label="Brutality" options={BRUTALITY_LEVELS} selectedId={brutalityId} onSelect={setBrutalityId} />
-        <OptionGroup label="Type of questions" options={NATURES} selectedId={natureId} onSelect={setNatureId} />
+        <OptionGroup
+          label="Mood"
+          options={MOODS}
+          selectedId={draft.moodId}
+          onSelect={(id) => onDraftChange({ moodId: id })}
+        />
+        <OptionGroup
+          label="Brutality"
+          options={BRUTALITY_LEVELS}
+          selectedId={draft.brutalityId}
+          onSelect={(id) => onDraftChange({ brutalityId: id })}
+        />
+        <OptionGroup
+          label="Type of questions"
+          options={NATURES}
+          selectedId={draft.natureId}
+          onSelect={(id) => onDraftChange({ natureId: id })}
+        />
       </div>
 
       <div className="flex items-center gap-3">
@@ -122,7 +134,7 @@ export const AiPromptStep: React.FC<AiPromptStepProps> = ({
           value={count}
           onChange={(e) => {
             const parsed = Number(e.target.value);
-            if (!Number.isNaN(parsed)) setCount(Math.min(maxCount, Math.max(1, Math.floor(parsed))));
+            if (!Number.isNaN(parsed)) onDraftChange({ count: Math.min(maxCount, Math.max(1, Math.floor(parsed))) });
           }}
           className="w-20 bg-outwit-black border border-neutral-700 rounded-lg px-2.5 py-1.5 text-sm text-white focus:border-outwit-yellow focus:outline-none"
         />
@@ -137,8 +149,8 @@ export const AiPromptStep: React.FC<AiPromptStepProps> = ({
           id="ai-q-context"
           rows={2}
           maxLength={GAME_LIMITS.AI_CONTEXT_MAX_LENGTH}
-          value={context}
-          onChange={(e) => setContext(e.target.value)}
+          value={draft.context}
+          onChange={(e) => onDraftChange({ context: e.target.value })}
           placeholder="Inside jokes, favourite hangouts, running gags, recent events..."
           className="w-full bg-outwit-black border border-neutral-700 rounded-xl p-2.5 text-sm text-white focus:border-outwit-yellow focus:outline-none"
         />
@@ -156,8 +168,8 @@ export const AiPromptStep: React.FC<AiPromptStepProps> = ({
             id="ai-q-include"
             type="text"
             maxLength={GAME_LIMITS.AI_TOPICS_MAX_LENGTH}
-            value={includeTopics}
-            onChange={(e) => setIncludeTopics(e.target.value)}
+            value={draft.includeTopics}
+            onChange={(e) => onDraftChange({ includeTopics: e.target.value })}
             className="w-full bg-outwit-black border border-neutral-700 rounded-lg px-2.5 py-1.5 text-sm text-white focus:border-outwit-yellow focus:outline-none"
           />
         </div>
@@ -169,8 +181,8 @@ export const AiPromptStep: React.FC<AiPromptStepProps> = ({
             id="ai-q-avoid"
             type="text"
             maxLength={GAME_LIMITS.AI_TOPICS_MAX_LENGTH}
-            value={avoidTopics}
-            onChange={(e) => setAvoidTopics(e.target.value)}
+            value={draft.avoidTopics}
+            onChange={(e) => onDraftChange({ avoidTopics: e.target.value })}
             className="w-full bg-outwit-black border border-neutral-700 rounded-lg px-2.5 py-1.5 text-sm text-white focus:border-outwit-yellow focus:outline-none"
           />
         </div>
@@ -179,8 +191,8 @@ export const AiPromptStep: React.FC<AiPromptStepProps> = ({
       <label className="flex items-start gap-2 cursor-pointer text-xs text-neutral-300">
         <input
           type="checkbox"
-          checked={includeNicknames}
-          onChange={(e) => setIncludeNicknames(e.target.checked)}
+          checked={draft.includeNicknames}
+          onChange={(e) => onDraftChange({ includeNicknames: e.target.checked })}
           className="mt-0.5 accent-outwit-yellow"
         />
         <span>

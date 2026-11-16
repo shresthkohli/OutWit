@@ -15,6 +15,10 @@ import {
   validateTotalRounds,
   validateMaxPlayers,
   missingQuestionMessage,
+  getQuestionDeleteBlockReason,
+  planQuestionRemoval,
+  QUESTION_NOT_FOUND_MSG,
+  QUESTION_DELETE_LOCKED_MSG,
 } from '../src/lib/questionRules';
 import { GAME_LIMITS } from '../src/constants/gameLimits';
 
@@ -184,6 +188,57 @@ describe('questionRules business logic', () => {
           room({ questionCount: GAME_LIMITS.MAX_QUESTIONS_PER_GAME + 5 }),
         ),
       ).toBe(0);
+    });
+  });
+
+  describe('getQuestionDeleteBlockReason', () => {
+    it('handles LOBBY, currentRoundNumber 1, questionCount 5 correctly', () => {
+      const r = room({ status: 'LOBBY', currentRoundNumber: 1, questionCount: 5 });
+      expect(getQuestionDeleteBlockReason(r, 3)).toBeNull();
+      expect(getQuestionDeleteBlockReason(r, 1)).toBeNull();
+      expect(getQuestionDeleteBlockReason(r, 0)).toBe(QUESTION_NOT_FOUND_MSG);
+      expect(getQuestionDeleteBlockReason(r, 6)).toBe(QUESTION_NOT_FOUND_MSG);
+    });
+
+    it('handles status ANSWERING with currentRoundNumber 2', () => {
+      const r = room({ status: 'ANSWERING', currentRoundNumber: 2, questionCount: 5 });
+      expect(getQuestionDeleteBlockReason(r, 2)).toBe(QUESTION_DELETE_LOCKED_MSG);
+      expect(getQuestionDeleteBlockReason(r, 1)).toBe(QUESTION_DELETE_LOCKED_MSG);
+      expect(getQuestionDeleteBlockReason(r, 3)).toBeNull();
+    });
+
+    it('handles GAME_FINISHED', () => {
+      const r = room({ status: 'GAME_FINISHED', currentRoundNumber: 2, questionCount: 5 });
+      expect(getQuestionDeleteBlockReason(r, 3)).toBe(QUESTION_DELETE_LOCKED_MSG);
+    });
+
+    it('handles legacy room where questionCount is undefined and settings.totalRounds is 4', () => {
+      const r = room({ status: 'LOBBY', currentRoundNumber: 1, questionCount: undefined, settings: { totalRounds: 4 } });
+      expect(getQuestionDeleteBlockReason(r, 4)).toBeNull();
+      expect(getQuestionDeleteBlockReason(r, 5)).toBe(QUESTION_NOT_FOUND_MSG);
+    });
+  });
+
+  describe('planQuestionRemoval', () => {
+    it('shifts later questions up and marks the last doc for deletion', () => {
+      expect(planQuestionRemoval(['c', 'd', 'e'], 3)).toEqual({
+        updates: [
+          { roundNumber: 3, text: 'd' },
+          { roundNumber: 4, text: 'e' },
+        ],
+        deleteRoundNumber: 5,
+      });
+    });
+
+    it('handles a single-element tail', () => {
+      expect(planQuestionRemoval(['x'], 2)).toEqual({
+        updates: [],
+        deleteRoundNumber: 2,
+      });
+    });
+
+    it('throws when given an empty array', () => {
+      expect(() => planQuestionRemoval([], 1)).toThrow();
     });
   });
 });

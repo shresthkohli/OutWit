@@ -17,15 +17,17 @@ import {
   kickPlayer,
 } from '../services/firestoreService';
 import { useCountdown } from '../hooks/useCountdown';
+import { useAiPromptDraft } from '../hooks/useAiPromptDraft';
 import { sessionStore, getOrCreateAnonymousUser } from '../services/authService';
 import { Room, Round, Player, Answer, RoundScore, QuestionDoc } from '../types/game';
 import { Header } from '../components/common/Header';
 import { HostDashboard } from '../components/host/HostDashboard';
-import { subscribeToQuestions, addQuestion, addQuestions, editQuestion } from '../services/questionService';
+import { subscribeToQuestions, addQuestion, addQuestions, editQuestion, deleteQuestion } from '../services/questionService';
 import { updateTotalRounds, updateMaxPlayers } from '../services/roomSettingsService';
 import { QuestionManager } from '../components/host/QuestionManager';
 import { AiQuestionsModal } from '../components/host/AiQuestionsModal';
 import { getStartBlockReason, getRemainingQuestionSlots } from '../lib/questionRules';
+import { GAME_LIMITS } from '../constants/gameLimits';
 import { APP_INFO } from '../constants/appInfo';
 import { AlertCircle, ShieldAlert, KeyRound } from 'lucide-react';
 import { doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -49,6 +51,13 @@ export const HostPage: React.FC = () => {
   const [authReady, setAuthReady] = useState(false);
   const [enteredToken, setEnteredToken] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
+
+  const aiMaxCount = room ? Math.max(1, getRemainingQuestionSlots(room)) : GAME_LIMITS.MAX_QUESTIONS_PER_GAME;
+  const { draft: aiDraft, updateDraft: updateAiDraft } = useAiPromptDraft(
+    room?.roomCode,
+    room?.status,
+    aiMaxCount
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -257,6 +266,7 @@ export const HostPage: React.FC = () => {
   const handleAddQuestion = (text: string) => addQuestion(room!.id, text);
   const handleImportQuestions = (texts: string[]) => addQuestions(room!.id, texts);
   const handleEditQuestion = (roundNumber: number, text: string) => editQuestion(room!.id, roundNumber, text);
+  const handleDeleteQuestion = (roundNumber: number) => deleteQuestion(room!.id, roundNumber);
   const handleChangeTotalRounds = (n: number) => updateTotalRounds(room!.id, n);
   const handleUpdateMaxPlayers = (n: number) => updateMaxPlayers(room!.id, n);
 
@@ -365,6 +375,7 @@ export const HostPage: React.FC = () => {
             questions={questions}
             onAdd={handleAddQuestion}
             onEdit={handleEditQuestion}
+            onDelete={handleDeleteQuestion}
             onChangeTotalRounds={handleChangeTotalRounds}
             onOpenAiHelper={() => setIsAiOpen(true)}
           />
@@ -378,6 +389,8 @@ export const HostPage: React.FC = () => {
             remainingSlots={getRemainingQuestionSlots(room)}
             existingTexts={questions.map((q) => q.text)}
             onImport={handleImportQuestions}
+            draft={aiDraft}
+            onDraftChange={updateAiDraft}
           />
         </div>
       </main>

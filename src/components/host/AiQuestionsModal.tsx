@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Sparkles, CheckCircle2 } from 'lucide-react';
 import { AiPromptStep } from './AiPromptStep';
 import { AiImportStep } from './AiImportStep';
+import type { AiPromptDraft } from '../../lib/aiPrompt';
 
 export interface AiQuestionsModalProps {
   isOpen: boolean;
@@ -13,6 +14,8 @@ export interface AiQuestionsModalProps {
   remainingSlots: number;
   existingTexts: string[];
   onImport: (texts: string[]) => Promise<{ success: boolean; error?: string }>;
+  draft: AiPromptDraft;
+  onDraftChange: (patch: Partial<AiPromptDraft>) => void;
 }
 
 export const AiQuestionsModal: React.FC<AiQuestionsModalProps> = ({
@@ -25,6 +28,8 @@ export const AiQuestionsModal: React.FC<AiQuestionsModalProps> = ({
   remainingSlots,
   existingTexts,
   onImport,
+  draft,
+  onDraftChange,
 }) => {
   const [step, setStep] = useState<'prompt' | 'upload'>('prompt');
   const [addedCount, setAddedCount] = useState<number | null>(null);
@@ -93,6 +98,8 @@ export const AiQuestionsModal: React.FC<AiQuestionsModalProps> = ({
               nicknames={nicknames}
               remainingSlots={remainingSlots}
               onNext={() => setStep('upload')}
+              draft={draft}
+              onDraftChange={onDraftChange}
             />
           ) : (
             <AiImportStep

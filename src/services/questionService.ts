@@ -9,6 +9,10 @@ import {
   isQuestionEditable,
   validateQuestionText,
   QUESTION_ALREADY_ASKED_MSG,
+  getQuestionDeleteBlockReason,
+  planQuestionRemoval,
+  QUESTION_NOT_FOUND_MSG,
+  QUESTION_DELETE_LOCKED_MSG,
 } from '../lib/questionRules';
 
 /** The ONLY place that builds question document ids. */
@@ -134,6 +138,64 @@ export async function editQuestion(roomId: string, roundNumber: number, text: st
     return { success: true };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : 'Failed to edit question.' };
+  }
+}
+
+/** HOST: Deletes a question that has not been asked yet and shifts subsequent questions. */
+export async function deleteQuestion(roomId: string, roundNumber: number): Promise<ServiceResult> {
+  if (!db) throw new Error('Firestore not initialized.');
+  const database = db;
+
+  const roomRef = doc(database, 'rooms', roomId);
+  try {
+    await runTransaction(database, async (tx) => {
+      // 1. read the room doc; throw 'Room not found.' if missing.
+      const roomSnap = await tx.get(roomRef);
+      if (!roomSnap.exists()) throw new Error('Room not found.');
+      const room = roomSnap.data() as Omit<Room, 'id'>;
+
+      // 2. reason = getQuestionDeleteBlockReason(room, roundNumber); throw new Error(reason) if not null.
+      const reason = getQuestionDeleteBlockReason(room, roundNumber);
+      if (reason) throw new Error(reason);
+
+      // 3. count = getQuestionCount(room). Read question docs questionDocRef(roomId, n) for n = roundNumber..count.
+      const count = getQuestionCount(room);
+      const questionSnaps = [];
+      for (let n = roundNumber; n <= count; n++) {
+        const qSnap = await tx.get(questionDocRef(roomId, n));
+        if (!qSnap.exists()) throw new Error(QUESTION_NOT_FOUND_MSG);
+        questionSnaps.push(qSnap);
+      }
+      const tailTexts = questionSnaps.map((s) => (s.data() as QuestionDoc).text);
+
+      // 4. only if roundNumber === room.currentRoundNumber: read the round doc `round_${roundNumber}` exactly like editQuestion does;
+      // if it exists and its status !== 'LOBBY' throw new Error(QUESTION_DELETE_LOCKED_MSG).
+      let roundRef: DocumentReference | null = null;
+      let roundExists = false;
+      if (roundNumber === room.currentRoundNumber) {
+        roundRef = doc(database, 'rooms', roomId, 'rounds', `round_${roundNumber}`);
+        const roundSnap = await tx.get(roundRef);
+        roundExists = roundSnap.exists();
+        if (roundExists && (roundSnap.data() as Round).status !== 'LOBBY') {
+          throw new Error(QUESTION_DELETE_LOCKED_MSG);
+        }
+      }
+
+      // THEN WRITES:
+      const plan = planQuestionRemoval(tailTexts, roundNumber);
+      const now = Date.now();
+      for (const u of plan.updates) {
+        tx.update(questionDocRef(roomId, u.roundNumber), { text: u.text, updatedAt: now });
+      }
+      tx.delete(questionDocRef(roomId, plan.deleteRoundNumber));
+      tx.update(roomRef, { questionCount: count - 1, updatedAt: now });
+      if (roundRef && roundExists) {
+        tx.update(roundRef, { question: plan.updates[0]?.text ?? '' });
+      }
+    });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Failed to delete question.' };
   }
 }
 

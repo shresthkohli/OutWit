@@ -9,12 +9,14 @@ import {
   isQuestionEditable,
   validateTotalRounds,
 } from '../../lib/questionRules';
+import { DeleteQuestionButton } from './DeleteQuestionButton';
 
 export interface QuestionManagerProps {
   room: Room;
   questions: QuestionDoc[];
   onAdd: (text: string) => Promise<ServiceResult>;
   onEdit: (roundNumber: number, text: string) => Promise<ServiceResult>;
+  onDelete: (roundNumber: number) => Promise<ServiceResult>;
   onChangeTotalRounds: (n: number) => Promise<ServiceResult>;
   onOpenAiHelper?: () => void;
 }
@@ -24,6 +26,7 @@ export const QuestionManager: React.FC<QuestionManagerProps> = ({
   questions,
   onAdd,
   onEdit,
+  onDelete,
   onChangeTotalRounds,
   onOpenAiHelper,
 }) => {
@@ -31,6 +34,7 @@ export const QuestionManager: React.FC<QuestionManagerProps> = ({
   const [editDraft, setEditDraft] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [newQuestionText, setNewQuestionText] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
@@ -46,6 +50,7 @@ export const QuestionManager: React.FC<QuestionManagerProps> = ({
     setEditingRoundNumber(q.roundNumber);
     setEditDraft(q.text);
     setEditError(null);
+    setDeleteError(null);
   };
 
   const handleCancelEdit = () => {
@@ -77,6 +82,7 @@ export const QuestionManager: React.FC<QuestionManagerProps> = ({
     if (addBlockReason || addSaving) return;
     setAddSaving(true);
     setAddError(null);
+    setDeleteError(null);
     try {
       const res = await onAdd(newQuestionText);
       if (res.success) {
@@ -193,14 +199,24 @@ export const QuestionManager: React.FC<QuestionManagerProps> = ({
                     </span>
                   </div>
                   {editable && !isEditing && (
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit(q)}
-                      className="p-1 text-neutral-400 hover:text-white transition-colors"
-                      title="Edit question"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleStartEdit(q)}
+                        className="p-1 text-neutral-400 hover:text-white transition-colors"
+                        title="Edit question"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <DeleteQuestionButton
+                        roundNumber={q.roundNumber}
+                        onConfirm={async (n) => {
+                          setDeleteError(null);
+                          const res = await onDelete(n);
+                          if (!res.success) setDeleteError(res.error ?? 'Could not delete question.');
+                        }}
+                      />
+                    </div>
                   )}
                 </div>
 
@@ -243,6 +259,7 @@ export const QuestionManager: React.FC<QuestionManagerProps> = ({
           })
         )}
       </div>
+      {deleteError && <p className="text-xs text-outwit-red">{deleteError}</p>}
 
       {/* 5. Add Question Form */}
       <form onSubmit={handleAddSubmit} className="space-y-2 pt-2 border-t border-neutral-800">
